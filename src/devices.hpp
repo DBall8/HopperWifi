@@ -1,8 +1,10 @@
 #ifndef DEVICES_HPP
 #define DEVICES_HPP
 
-#include "app/WifiController.hpp"
+#include "drivers/serial/ISerial.hpp"
 
-extern Wifi::WifiController* pWifi;
+extern SerialComm::ISerial* pMainSerial;
+
+void initDevices();
 
 #endif

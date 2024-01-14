@@ -1,0 +1,6 @@
+[submodule "src/drivers"]
+	path = src/drivers
+	url = https://github.com/DBall8/ArduinoDrivers.git
+[submodule "src/utilities"]
+	path = src/utilities
+	url = https://github.com/DBall8/CppUtilities.git
