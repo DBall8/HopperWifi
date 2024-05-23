@@ -1,6 +1,7 @@
 #include "EepromManager.hpp"
 #include <EEPROM.h>
 #include "utilities/print/Print.hpp"
+#include "config.hpp"
 
 namespace Hopper
 {
@@ -39,7 +40,7 @@ namespace Hopper
         eepromInitialized = true;
     }
 
-    void getWifiCreds(char* ssid, char* password)
+    void eeprom_getWifiCreds(char* ssid, char* password)
     {
         if (!eepromInitialized) initEeprom();
 
@@ -71,7 +72,7 @@ namespace Hopper
         }
     }
 
-    uint16_t getId()
+    uint16_t eeprom_getId()
     {
         if (!eepromInitialized) initEeprom();
 
@@ -85,7 +86,7 @@ namespace Hopper
         return id;
     }
 
-    void setWifiCreds(char* ssid, char* password)
+    void eeprom_setWifiCreds(const char* ssid, const char* password)
     {
         if (!eepromInitialized) initEeprom();
 
@@ -120,7 +121,7 @@ namespace Hopper
         EEPROM.commit();
     }
 
-    void clearWifiCreds()
+    void eeprom_clearWifiCreds()
     {
         uint8_t i;
         for (i=0; i<MAX_SSID_LEN; i++)
@@ -136,7 +137,7 @@ namespace Hopper
         EEPROM.commit();
     }
 
-    void setId(uint16_t id)
+    void eeprom_setId(uint16_t id)
     {
         if (!eepromInitialized) initEeprom();
 

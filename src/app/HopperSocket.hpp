@@ -13,10 +13,11 @@ namespace Hopper
     class HopperSocket
     {
         public:
-            static HopperSocket& getInstance();
+            HopperSocket(Wifi::WifiController* pWifi);
+            ~HopperSocket(){}
 
-            void loadConfigs();
-            void connect();
+            void registerSocket();
+            bool connect(int32_t hopperId, const char* ssid, const char* password);
             void disconnect();
             void update();
             bool isConnected();
@@ -28,18 +29,13 @@ namespace Hopper
             const static uint16_t STR_BUFF_LEN = 1024;
             char strBuff_[STR_BUFF_LEN+1] = {0};
 
-            char ssid_[MAX_SSID_LEN] = {0};
-            char password_[MAX_PASSWORD_LEN] = {0};
-            int32_t hopperId_ = -1;
-
-            Wifi::WifiController wifi_;
+            Wifi::WifiController* pWifi_;
             SocketIOclient webSocket_;
-            HopperTimer wifiRetryTimer_;
             bool wifiConnected_ = false;
             bool socketConnected_ = false;
+            int32_t hopperId_ = -1;
 
-            void retryConnection();
-            void copyString(const char* str, size_t len);
+            void storeString(const char* str, size_t len);
             bool parseMessage(char** pName, char** pData);
 
             void sendMessage(const char* cmd, const char* payload);
@@ -50,13 +46,10 @@ namespace Hopper
             void handleId();
             void handleStatus();
             void handleCmd(const char* cmd);
+            void handleCal(const char* step);
             void handleTest(const char* msg, size_t len);
             void sendFail(const char* name);
-
-            HopperSocket();
-            ~HopperSocket(){}
-            HopperSocket (const HopperSocket&) = delete;
-            HopperSocket& operator= (const HopperSocket&) = delete;
+            void sendPass(const char* name);
     };
 }
 

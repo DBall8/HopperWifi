@@ -12,12 +12,11 @@ using namespace Hopper;
 void test();
 
 void setup() {
-  initDevices();
-  pCli->enable();
-  ESP.wdtEnable(WDTO_8S);
+    initDevices();
+    pCli->enable();
+    ESP.wdtEnable(WDTO_8S);
 
-  HopperSocket::getInstance().loadConfigs();
-  HopperSocket::getInstance().connect();
+    pApp->start();
 }
 
 void loop() {
@@ -27,5 +26,5 @@ void loop() {
   ESP.wdtFeed();
   pCli->update();
 
-  HopperSocket::getInstance().update();
+  pApp->update();
 }

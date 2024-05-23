@@ -22,12 +22,12 @@ static void wifiCmd(uint16_t argc, ArgV argv)
     if (argc == 2)
     {
         // Only SSID given
-        setWifiCreds(argv[1], nullptr);
+        eeprom_setWifiCreds(argv[1], nullptr);
     }
     else if (argc == 3)
     {
         // SSID and password given
-        setWifiCreds(argv[1], argv[2]);
+        eeprom_setWifiCreds(argv[1], argv[2]);
     }
     else
     {
@@ -37,8 +37,6 @@ static void wifiCmd(uint16_t argc, ArgV argv)
     }
 
     PRINTLN(PASS_STR);
-    HopperSocket::getInstance().loadConfigs();
-    HopperSocket::getInstance().connect();
 }
 
 static void idCmd(uint16_t argc, ArgV argv)
@@ -57,22 +55,20 @@ static void idCmd(uint16_t argc, ArgV argv)
         return;
     }
 
-    setId((uint16_t)id);
+    eeprom_setId((uint16_t)id);
+    pApp->loadConfigs();
     PRINTLN(PASS_STR);
-
-    HopperSocket::getInstance().loadConfigs();
-    HopperSocket::getInstance().connect();
 }
 
 static void clearCmd(uint16_t argc, ArgV argv)
 {
-    clearWifiCreds();
+    eeprom_clearWifiCreds();
     PRINTLN(PASS_STR);
 }
 
 static void statusCmd(uint16_t argc, ArgV argv)
 {
-    if (HopperSocket::getInstance().isConnected())
+    if (pApp->isSocketConnected())
     {
         PRINTLN(CONNECTED_STR);
     }
@@ -84,20 +80,21 @@ static void statusCmd(uint16_t argc, ArgV argv)
 
 static void getCmd(uint16_t argc, ArgV argv)
 {
-    PRINTLN("%d", getId());
+    PRINTLN("%d", eeprom_getId());
 }
 
 static void logCmd(uint16_t argc, ArgV argv)
 {
     if (argc >= 2)
     {
-        HopperSocket::getInstance().log(argv[1]);
+        pApp->log(argv[1]);
     }
 }
 
 static void setupCmd(uint16_t argc, ArgV argv)
 {
-    PRINTLN("START AP MODE\n");
+    DEBUG_PRINTLN("START AP MODE\n");
+    pApp->enterSetup();
     return;
 }
 
@@ -116,3 +113,16 @@ const static uint8_t NUM_COMMANDS = sizeof(commands) / sizeof(commands[0]);
 
 static CommandInterface wifiCli(pMainSerial, commands, NUM_COMMANDS, true);
 CommandInterface* pCli = &wifiCli;
+
+#ifdef ENABLE_LOG_LOCAL
+void log_local(const char* format, ...)
+{
+    va_list list;
+    va_start(list, format);
+
+    PRINT("%s ", LOG_CMD);
+    PRINTLN(format, list);
+
+    va_end(list);
+}
+#endif

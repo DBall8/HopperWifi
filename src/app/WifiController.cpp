@@ -13,8 +13,6 @@ namespace Wifi
 
     WifiController::WifiController()
     {
-        pServer_ = nullptr;
-        clientHandler_ = nullptr;
     }
     void WifiController::shutOff()
     {
@@ -68,6 +66,36 @@ namespace Wifi
         WiFi.mode(WIFI_OFF);
         WiFi.forceSleepBegin();
         delay(1);
+    }
+
+    void WifiController::startAp(const char* name, const char* password)
+    {
+        WiFi.forceSleepWake();
+        delay(1);
+
+        if (password == NULL)
+        {
+            WiFi.softAP(name);
+        }
+        else
+        {
+            WiFi.softAP(name, password);
+        }
+
+        IPAddress IP = WiFi.softAPIP();
+        DEBUG_PRINTLN("AP IP address: %s", IP.toString().c_str());
+    }
+
+    void WifiController::startAp(const char* name,
+                                 const char* password,
+                                 IPAddress localIp,
+                                 IPAddress gatewayIp,
+                                 IPAddress subnetIp)
+    {
+        WiFi.persistent(false);
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAPConfig(localIp, gatewayIp, subnetIp);
+        startAp(name, password);
     }
 
     uint16_t WifiController::get(
@@ -160,63 +188,39 @@ namespace Wifi
         return numBytes;
     }
 
-    bool WifiController::startServer(uint16_t port, void (*clientHandler)(WiFiClient*))
+    WiFiServer* WifiController::startServer(uint16_t port)
     {
-        if (pServer_ != nullptr)
-        {
-            stopServer();
-        }
+        WiFiServer* pServer = new WiFiServer(port);
 
-        if (!isConnected())
-        {
-            return false;
-        }
+        pServer->begin();
 
-        clientHandler_ = clientHandler;
-        pServer_ = new WiFiServer(port);
+        DEBUG_PRINTLN("Server open on %s:%d", WiFi.localIP().toString().c_str(), pServer->port());
 
-        pServer_->begin();
-
-#ifdef DEBUG
-        PRINTLN("Server open on %s:%d", WiFi.localIP().toString().c_str(), pServer_->port());
-#endif
-
-        return true;
+        return pServer;
     }
 
-    void WifiController::stopServer()
+    void WifiController::stopServer(WiFiServer* pServer)
     {
-        pServer_->close();
-
-        clientHandler_ = nullptr;
-        delete(pServer_);
-        pServer_ = nullptr;
+        if (pServer == NULL) return;
+        pServer->close();
+        delete(pServer);
     }
 
-    void WifiController::updateServer()
+    void WifiController::updateServer(WiFiServer* pServer, void (*clientHandler)(WiFiClient*))
     {
-        if (!pServer_ || !clientHandler_ || (!isConnected()))
+        if (!pServer || !clientHandler)
         {
             return;
         }
 
-        WiFiClient client = pServer_->available();
+        WiFiClient client = pServer->available();
         if (!client)
         {
             return;
         }
 
-#ifdef DEBUG
-        PRINTLN("Client connected.");
-#endif
-
-        while (!client.available())
-        {
-            delay(10);
-            ESP.wdtFeed();
-        }
-        
-        clientHandler_(&client);
+        DEBUG_PRINTLN("Client connected.");
+        clientHandler(&client);
     }
 
     void WifiController::skipHeader(WiFiClient* pClient)

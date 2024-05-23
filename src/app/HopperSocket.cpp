@@ -1,17 +1,21 @@
 #include "HopperSocket.hpp"
 #include "hopper_shared.hpp"
+#include "WifiCli.hpp"
 #include "utilities/print/Print.hpp"
 #include "devices.hpp"
 #include "utilities/circular_queue/CircularQueue.hpp"
+#include "utilities/strings/Strings.hpp"
 
 #include <ESP8266WiFi.h>
 #include <string.h>
+
+using namespace Wifi;
 
 namespace Hopper
 {
 
 #ifdef LOCAL_SERVER
-    const static char* URL = "192.168.0.17";
+    const static char* URL = "192.168.1.25";
     //const static char* TEST_URL = "http://192.168.0.14:8002/test";
     const static uint16_t PORT = 8002;
 #else
@@ -24,41 +28,42 @@ namespace Hopper
     const static char* MSG_FORMAT_STR = "[\"%s\",\"%s\"]";
     const static char* MSG_FORMAT_NUM = "[\"%s\",%d]";
 
-    const static char* ID_STR = "id";
-    const static char* ID_R_STR = "id_r";
-    const static char* STATUS_STR = "status";
+    const static char* ID_STR       = "id";
+    const static char* ID_R_STR     = "id_r";
+    const static char* STATUS_STR   = "status";
     const static char* STATUS_R_STR = "status_r";
-    const static char* CMD_STR = "cmd";
-    const static char* CMD_R_STR = "cmd_r";
-    const static char* LOG_STR = "log";
+    const static char* CMD_STR      = "cmd";
+    const static char* CMD_R_STR    = "cmd_r";
+    const static char* CAL_STR      = "cal";
+    const static char* CAL_R_STR    = "cal_r";
+    const static char* LOG_STR      = "log";
 
     #define MAX_LOG_LEN 31
     #define MAX_LOG_Q_LEN 10
     static char logBuffer[MAX_LOG_LEN * MAX_LOG_Q_LEN] = {0};
     static uint8_t currLogIndex = 0;
 
+    static HopperSocket* pActiveSocketInstance = NULL;
     static void eventHandler(socketIOmessageType_t type, uint8_t * payload, size_t length)
     {
-        HopperSocket::getInstance().handleMessage(type, payload, length);
+        if (pActiveSocketInstance == NULL) return;
+        pActiveSocketInstance->handleMessage(type, payload, length);
     }
 
-    HopperSocket& HopperSocket::getInstance()
-    {
-        static HopperSocket instance;
-        return instance;
-    }
-
-    HopperSocket::HopperSocket():
-        wifiRetryTimer_(RETRY_MS)
+    HopperSocket::HopperSocket(WifiController* pWifi):
+        pWifi_(pWifi)
     {}
 
-    void HopperSocket::copyString(const char* str, size_t len)
+    void HopperSocket::registerSocket()
+    {
+        pActiveSocketInstance = this;
+    }
+
+    void HopperSocket::storeString(const char* str, size_t len)
     {
         if (len >= STR_BUFF_LEN)
         {
-#ifdef DEBUG
-            PRINTLN("CONN msg too large.");
-#endif
+            DEBUG_PRINTLN("CONN msg too large.");
             return;
         }
 
@@ -186,9 +191,9 @@ namespace Hopper
 
     void HopperSocket::handleConnect(const char* msg, size_t len)
     {
-        copyString(msg, len);
-        PRINTLN("Rec %d bytes:", len);
-        PRINTLN(strBuff_);
+        storeString(msg, len);
+        DEBUG_PRINTLN("Rec %d bytes:", len);
+        DEBUG_PRINTLN(strBuff_);
     }
 
     void HopperSocket::handleEvent(char* name, char* data)
@@ -204,6 +209,10 @@ namespace Hopper
         else if (strcmp(name, CMD_STR) == 0)
         {
             handleCmd(data);
+        }
+        else if (strcmp(name, CAL_STR) == 0)
+        {
+            handleCal(data);
         }
     }
 
@@ -272,8 +281,7 @@ namespace Hopper
     void HopperSocket::handleCmd(const char* cmd)
     {
         const char* cmdStr = nullptr;
-        char successStr[5] = {0};
-        int status = 3;
+        int8_t status = 3;
 
         if (cmd == nullptr)
         {
@@ -304,17 +312,72 @@ namespace Hopper
             sendFail(CMD_R_STR);
             return;
         }
+        StringUtilities::trim(strBuff_);
 
-        uint8_t numTokens = sscanf(strBuff_, "%s %d", successStr, &status);
-        if ((numTokens == 2) &&
-            (strcmp(successStr, PASS_STR) == 0) &&
-            (status >= 0))
+        // Confirm the PASS response
+        char* token = strtok(strBuff_, " ");
+
+        if ((token == nullptr) ||
+            (strcmp(token, PASS_STR) != 0))
         {
-            sendMessage(CMD_R_STR, status);
+            sendFail(CMD_R_STR);
+            return;
+        }
+
+        // Extract the status
+        token = strtok(NULL, " ");
+        if (token == nullptr)
+        {
+            sendFail(CMD_R_STR);
+            return;
+        }
+
+        // Convert to int
+        status = strtol(token, NULL, 10);
+        if ((status == 0) && (token[0] != '0'))
+        {
+            sendFail(CMD_R_STR);
+            return;
+        }
+
+        sendMessage(CMD_R_STR, status);
+    }
+
+    void HopperSocket::handleCal(const char* step)
+    {
+        char msgToMain[sizeof(CALIBRATE_CMD) + 2] = {0};
+
+        if (step == nullptr)
+        {
+            sendFail(CAL_R_STR);
+            return;
+        }
+
+        // Format is 'CAL' + letter indicated step
+        uint8_t calCmdLen = sizeof(CALIBRATE_CMD) - 1;
+        memcpy(msgToMain, CALIBRATE_CMD, calCmdLen);
+        msgToMain[calCmdLen] = ' ';
+        msgToMain[calCmdLen + 1] = step[0];
+        msgToMain[calCmdLen + 2] = '\0';
+
+        pMainSerial->flush();
+        PRINTLN(msgToMain);
+
+        memset(strBuff_, 0, STR_BUFF_LEN);
+        if (!pMainSerial->readLine((uint8_t*)strBuff_, STR_BUFF_LEN, CMD_TIMEOUT_MS))
+        {
+            sendFail(CAL_R_STR);
+            return;
+        }
+
+        StringUtilities::trim(strBuff_);
+        if (strcmp(strBuff_, CAL_PASS_STR) == 0)
+        {
+            sendPass(CAL_R_STR);
         }
         else
         {
-            sendFail(CMD_R_STR);
+            sendFail(CAL_R_STR);
         }
     }
 
@@ -326,18 +389,15 @@ namespace Hopper
         switch (type)
         {
         case socketIOmessageType_t::sIOtype_CONNECT:
-#ifdef DEBUG
-            PRINTLN("Socket connected.");
-#endif
+            DEBUG_PRINTLN("Socket connected.");
+            LOG_LOCAL("S C");
             break;
 
         case socketIOmessageType_t::sIOtype_EVENT:
-            copyString((char*)payload, length);
+            storeString((char*)payload, length);
 
-#ifdef DEBUG
-            PRINTLN("REC event: %d bytes", length);
-            PRINTLN(strBuff_);
-#endif 
+            DEBUG_PRINTLN("REC event: %d bytes", length);
+            DEBUG_PRINTLN(strBuff_);
             if (!parseMessage(&name, &data) ||
                 (name == nullptr))
             {
@@ -348,15 +408,14 @@ namespace Hopper
             break;
 
         case socketIOmessageType_t::sIOtype_ERROR:
-#ifdef DEBUG
-            PRINTLN("REC: ERR");
-            copyString((char*)payload, length);
-            PRINTLN("REC: %d bytes", length);
-            PRINTLN(strBuff_);
-#endif
+            storeString((char*)payload, length);
+            DEBUG_PRINTLN("ERR: %d bytes", length);
+            DEBUG_PRINTLN(strBuff_);
+            LOG_LOCAL("SE: %d", length);
             break;
 
         case socketIOmessageType_t::sIOtype_DISCONNECT:
+            LOG_LOCAL("S DC");
             break;
         
         default:
@@ -364,58 +423,46 @@ namespace Hopper
         }
     }
 
-    void HopperSocket::loadConfigs()
+    bool HopperSocket::connect(int32_t hopperId, const char* ssid, const char* password)
     {
-        getWifiCreds(ssid_, password_);
-        hopperId_ = getId();
-
-    #ifdef DEBUG
-        PRINTLN("\n");
-        PRINTLN("ID: %d", hopperId_);
-        PRINTLN("SSID: %s", ssid_);
-        PRINTLN("PASS: %s", password_);
-    #endif
-    }
-
-    void HopperSocket::connect()
-    {
-        // Stop the retry timer, and only restart it if we have valid configs
-        wifiRetryTimer_.stop();
-
         if (wifiConnected_ || socketConnected_)
         {
             disconnect();
         }
 
-        if ((ssid_ != nullptr) &&
-            (ssid_[0] != '\0') &&
-            (hopperId_ > 0))
+        hopperId_ = hopperId;
+
+        if ((ssid == nullptr) ||
+            (ssid[0] == '\0'))
         {
-            // First, connect to an AP
-            wifi_.shutOff();
-            if (!wifi_.connect(ssid_, password_))
-            {
-#ifdef DEBUG
-                PRINTLN("CONN FAILED");
-#endif
-                wifiConnected_ = false;
-                wifiRetryTimer_.start();
-                return;
-            }
-
-            wifiConnected_ = true;
-            DEBUG_PRINTLN("CONNECTED");
-
-            webSocket_.setReconnectInterval(500);
-#ifdef LOCAL_SERVER
-            webSocket_.begin(URL, PORT, PATH);
-#else
-            webSocket_.beginSSL(URL, PORT, PATH);
-#endif
-            // Set event handler
-            webSocket_.onEvent(eventHandler);
-            webSocket_.enableHeartbeat(HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, DC_HEARTBEAT_COUNT);
+            // We do not have enough credentials to connect yet
+            LOG_LOCAL("No SSID");
+            return false;
         }
+        // First, connect to an AP
+        pWifi_->shutOff();
+        if (!pWifi_->connect(ssid, password))
+        {
+            DEBUG_PRINTLN("CONN FAILED");
+            LOG_LOCAL("AP F");
+            wifiConnected_ = false;
+            return false;
+        }
+
+        wifiConnected_ = true;
+        DEBUG_PRINTLN("CONNECTED");
+        LOG_LOCAL("AP C");
+
+        webSocket_.setReconnectInterval(500);
+#ifdef LOCAL_SERVER
+        webSocket_.begin(URL, PORT, PATH);
+#else
+        webSocket_.beginSSL(URL, PORT, PATH);
+#endif
+        // Set event handler
+        webSocket_.onEvent(eventHandler);
+        webSocket_.enableHeartbeat(HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, DC_HEARTBEAT_COUNT);
+        return true;
     }
 
     void HopperSocket::disconnect()
@@ -428,34 +475,21 @@ namespace Hopper
         if (wifiConnected_)
         {
             wifiConnected_ = false;
-            wifi_.disconnect();
+            pWifi_->disconnect();
         }
     }
 
     void HopperSocket::update()
     {
-        bool wifiConnNew = wifi_.isConnected();
-        if (wifiConnected_ != wifiConnNew)
-        {
-            wifiConnected_ = wifiConnNew;
-            if (!wifiConnected_) connect();
-        }
-        else if (!wifiConnected_)
-        {
-            retryConnection();
-        }
-        else
-        {
-            webSocket_.loop();
+        webSocket_.loop();
 
-            bool isSocketConn = webSocket_.isConnected();
-            if (socketConnected_ != isSocketConn)
-            {
-                PRINTLN(isSocketConn ? CONNECTED_STR : DISCONNECTED_STR);
-                socketConnected_ = isSocketConn;
+        bool isSocketConn = webSocket_.isConnected();
+        if (socketConnected_ != isSocketConn)
+        {
+            PRINTLN(isSocketConn ? CONNECTED_STR : DISCONNECTED_STR);
+            socketConnected_ = isSocketConn;
 
-                if (!socketConnected_) webSocket_.setReconnectInterval(SOCKET_RECONNECT_MS);
-            }
+            if (!socketConnected_) webSocket_.setReconnectInterval(SOCKET_RECONNECT_MS);
         }
     }
             
@@ -487,11 +521,8 @@ namespace Hopper
         sendMessage(name, "fail");
     }
 
-    void HopperSocket::retryConnection()
+    void HopperSocket::sendPass(const char* name)
     {
-        if (wifiRetryTimer_.hasPeriodPassed())
-        {
-            connect();
-        }
+        sendMessage(name, "pass");
     }
 }

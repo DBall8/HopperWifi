@@ -18,6 +18,12 @@ namespace Wifi
             bool isConnected() { return WiFi.isConnected(); }
             bool connect(const char* ssid, const char* password);
             void disconnect();
+            void startAp(const char* name, const char* password);
+            void startAp(const char* name,
+                         const char* password,
+                         IPAddress localIp,
+                         IPAddress gatewayIp,
+                         IPAddress subnetIp);
 
             uint16_t get(const char* url,
                         uint16_t port,
@@ -31,16 +37,12 @@ namespace Wifi
                           uint8_t* response = nullptr,
                           uint16_t respLen = 0);
 
-            bool startServer(uint16_t port, void (*clientHandler)(WiFiClient*));
-            void stopServer();
-            void updateServer();
+            WiFiServer* startServer(uint16_t port);
+            void stopServer(WiFiServer* pServer);
+            void updateServer(WiFiServer* pServer, void (*clientHandler)(WiFiClient*));
 
             void skipHeader(WiFiClient* pClient);
             void sendGenericSuccessHeader(WiFiClient* pClient);
-
-        private:
-            WiFiServer* pServer_;
-            void (*clientHandler_)(WiFiClient*);
     };
 }
 

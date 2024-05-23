@@ -5,17 +5,13 @@
 
 namespace Hopper
 {
-    const static uint8_t MAX_SSID_LEN = 32;
-    const static uint8_t MAX_PASSWORD_LEN = 64;
-    const static uint8_t ID_LEN = sizeof(uint16_t);
-
     void initEeprom();
-    void getWifiCreds(char* ssid, char* password);
-    uint16_t getId();
+    void eeprom_getWifiCreds(char* ssid, char* password);
+    uint16_t eeprom_getId();
 
-    void setWifiCreds(char* ssid, char* password);
-    void clearWifiCreds();
-    void setId(uint16_t id);
+    void eeprom_setWifiCreds(const char* ssid, const char* password);
+    void eeprom_clearWifiCreds();
+    void eeprom_setId(uint16_t id);
 }
 
 #endif
