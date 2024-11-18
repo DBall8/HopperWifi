@@ -14,6 +14,8 @@ const static char* GENERIC_SUCCESS_BODY = "{\"success\":true}";
 const static char* GENERIC_FAIL_BODY = "{\"success\":false}";
 const static char* ID_BODY = "{\"success\":true,\"id\":%d}";
 const static char* STATUS_BODY = "{\"success\":true,\"status\":%d}";
+const static char* SCAN_BODY_OPEN = "{\"success\":true,\"ssids\":[";
+const static char* SCAN_BODY_CLOSE = "]}";
 const static char* REQ_TYPE     = "GET"; 
 
 
@@ -66,7 +68,7 @@ void handleScanRequest(WiFiClient* pClient, String request)
     pClient->print(HEADER_END);
 
     bool firstAp = true;
-    pClient->print("[");
+    pClient->print(SCAN_BODY_OPEN);
     for (uint8_t i=0; i<numNetworks; i++)
     {
         pClient->printf("%c{\"ssid\":\"%s\", \"rssi\":%d}",
@@ -77,7 +79,7 @@ void handleScanRequest(WiFiClient* pClient, String request)
 
         firstAp = false;
     }
-    pClient->print("]");
+    pClient->print(SCAN_BODY_CLOSE);
     pClient->stop();
 }
 

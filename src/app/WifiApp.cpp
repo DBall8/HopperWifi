@@ -1,11 +1,12 @@
 #include "WifiApp.hpp"
 #include "WifiCli.hpp"
 #include "SetupHandler.hpp"
+#include "hopper_shared.hpp"
 #include "utilities/print/Print.hpp"
 
 using namespace Wifi;
 
-const static char* SETUP_AP_NAME = "HOPPER_SETUP";
+const static char* SETUP_AP_NAME = "FEEDER_SETUP";
 const static char* SETUP_AP_PASS = NULL;
 const static uint16_t PORT = 80;
 
@@ -34,10 +35,6 @@ namespace Hopper
         if ((strlen(ssid_) > 0) && hopperId_ > 0)
         {
             startSocket();
-        }
-        else
-        {
-            enterSetup();
         }
     }
 
@@ -130,6 +127,8 @@ namespace Hopper
         pWifi_->startAp(SETUP_AP_NAME, SETUP_AP_PASS, localIp, gateway, subnet);
 
         pSetupServer_ = pWifi_->startServer(PORT);
+
+        PRINTLN("%s %c", SETUP_CMD, 't');
     }
 
     void WifiApp::exitSetup()
@@ -148,6 +147,9 @@ namespace Hopper
 
         pWifi_->disconnect();
         pWifi_->shutOff();
+
+        // Tell the main processor that we're exiting setup mode
+        PRINTLN("%s %c", SETUP_CMD, 'f');
 
         startSocket();
     }
