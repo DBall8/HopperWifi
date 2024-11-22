@@ -14,6 +14,8 @@ using namespace Wifi;
 namespace Hopper
 {
 
+    #define MAX_CMD_LEN 6
+
 #ifdef LOCAL_SERVER
     const static char* URL = "192.168.1.25";
     //const static char* TEST_URL = "http://192.168.0.14:8002/test";
@@ -289,22 +291,14 @@ namespace Hopper
             return;
         }
 
-        if (strcmp(cmd, OPEN_CMD) == 0)
-        {
-            cmdStr = OPEN_CMD;
-        }
-        else if (strcmp(cmd, CLOSE_CMD) == 0)
-        {
-            cmdStr = CLOSE_CMD;
-        }
-        else
+        if (strlen(cmd) > MAX_CMD_LEN)
         {
             sendFail(CMD_R_STR);
             return;
         }
 
         pMainSerial->flush();
-        PRINTLN(cmdStr);
+        PRINTLN(cmd);
 
         memset(strBuff_, 0, STR_BUFF_LEN);
         if (!pMainSerial->readLine((uint8_t*)strBuff_, STR_BUFF_LEN, CMD_TIMEOUT_MS))
